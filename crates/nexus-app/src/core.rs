@@ -158,11 +158,13 @@ fn run(
     mut history_sink: Option<HistorySink>,
 ) {
     let Some(dir) = journal_dir.or_else(nexus_journal::default_journal_dir) else {
+        tracing::warn!("no journal folder found");
         status.write().phase = Phase::Error("Could not locate the Elite Dangerous journal folder: set it under Settings › Journal".into());
         repaint();
         return;
     };
-    // Bindings and HUD colours read the game's Options folder, which on Linux sits in the same Wine prefix.
+    tracing::info!(dir = %dir.display(), "journal folder");
+    // Bindings and HUD colours read the game's Options folder, which on Linux and macOS sits in the same Wine prefix.
     nexus_journal::set_journal_dir_in_use(Some(&dir));
     status.write().journal_dir = Some(dir.clone());
     let files = match list_journal_files(&dir) {

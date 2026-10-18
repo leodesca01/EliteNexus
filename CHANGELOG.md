@@ -5,6 +5,16 @@ release time that section becomes the new version and the release workflow publi
 
 ## Unreleased
 
+### Added
+- **macOS** (Apple Silicon and Intel): `tools/macos/build-app.sh --install` builds `Elite Nexus.app` on your Mac
+  (Metal rendering, its own icon, an ad-hoc signature) and puts it in Applications. The game runs under NotProton
+  (Steam Play for the macOS Steam client), CrossOver or Whisky; Elite Nexus finds its journals in the game's prefix
+  in every Steam library (NotProton keeps Proton's `compatdata` layout), then in CrossOver's bottles and `~/.wine`,
+  and in Whisky's bottles only when none of those has one (macOS asks before an app looks into Whisky's container).
+  Data lives in `~/Library/Application Support/EliteNexus`, never inside the app. Voice alerts use the system's
+  `say`. API keys aren't encrypted on macOS (no DPAPI), and the app says so. Cockpit lights under CrossOver is
+  untested; the tab names the Steam launch option it may need.
+
 ## [0.5.0] - 2026-10-17
 
 Elite Nexus now runs natively on Linux, next to Elite Dangerous under Proton or Wine.

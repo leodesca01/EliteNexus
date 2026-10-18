@@ -226,8 +226,13 @@ fn controls(ui: &mut Ui, st: &mut CockpitUi, installs: &[GameInstall], playing: 
     });
 }
 
-/// Linux: what the game may need to load the hook under Proton. Elite Nexus hasn't been tried there.
-const PROTON_NOTE: &str = "On Linux this is untested. Proton brings its own d3d11.dll (DXVK) and may skip the one in the game folder: if calibrating finds no shaders, add WINEDLLOVERRIDES=\"d3d11,d3dcompiler_47=n,b\" %command% to Elite Dangerous's launch options in Steam (Properties › General).";
+/// Linux and macOS: what the game may need to load the hook under Proton or CrossOver. Elite Nexus hasn't been
+/// tried there.
+const PROTON_NOTE: &str = if cfg!(target_os = "macos") {
+    "On macOS this is untested. CrossOver (which NotProton and Whisky build on) runs Direct3D 11 through D3DMetal or DXVK and may skip the d3d11.dll in the game folder: if calibrating finds no shaders, add WINEDLLOVERRIDES=\"d3d11,d3dcompiler_47=n,b\" %command% to Elite Dangerous's launch options in Steam (Properties › General). If it still finds none, the hook can't run there: Remove takes it out again."
+} else {
+    "On Linux this is untested. Proton brings its own d3d11.dll (DXVK) and may skip the one in the game folder: if calibrating finds no shaders, add WINEDLLOVERRIDES=\"d3d11,d3dcompiler_47=n,b\" %command% to Elite Dangerous's launch options in Steam (Properties › General)."
+};
 
 fn not_installed(ui: &mut Ui, st: &mut CockpitUi, playing: bool, rt: &tokio::runtime::Handle) {
     ui.add(egui::Label::new(RichText::new("Dims your cockpit's own lights (lamps, panel glow, indicator lights) and nothing else: stations, carriers, planets and the HUD stay as they are.").color(pal::TEXT)).wrap());

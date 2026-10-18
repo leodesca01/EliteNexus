@@ -112,7 +112,11 @@ pub fn show(ui: &mut Ui, cx: &mut SettingsCtx<'_>) {
                         }
                     });
                     if cfg!(not(windows)) {
-                        let hint = "Linux: Elite Nexus looks in the game's Proton prefix in every Steam library (steamapps/compatdata/359320/pfx/drive_c/users/steamuser/Saved Games/Frontier Developments/Elite Dangerous), then in Lutris's and Heroic's usual folders. For any other Wine prefix, enter its folder here: Bindings and HUD colours then use the Options folder in that same prefix.";
+                        let hint = if cfg!(target_os = "macos") {
+                            "macOS: Elite Nexus looks in the game's prefix in every Steam library, where NotProton (Steam Play for macOS) keeps it (~/Library/Application Support/Steam/steamapps/compatdata/359320/pfx/drive_c/users/steamuser/Saved Games/Frontier Developments/Elite Dangerous), then in CrossOver's bottles, ~/.wine and Whisky's bottles. For any other Wine prefix, enter its folder here: Bindings and HUD colours then use the Options folder in that same prefix."
+                        } else {
+                            "Linux: Elite Nexus looks in the game's Proton prefix in every Steam library (steamapps/compatdata/359320/pfx/drive_c/users/steamuser/Saved Games/Frontier Developments/Elite Dangerous), then in Lutris's and Heroic's usual folders. For any other Wine prefix, enter its folder here: Bindings and HUD colours then use the Options folder in that same prefix."
+                        };
                         ui.add(egui::Label::new(RichText::new(hint).size(size::FOOTNOTE).color(pal::DIM)).wrap());
                     }
                 });

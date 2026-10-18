@@ -1,5 +1,5 @@
 # Push a tag like v0.1.0 (GitHub Desktop: History → right-click a commit → Create Tag, then Push)
-# and this builds Elite Nexus for Windows and Linux and publishes both as a GitHub Release, with that
+# and this builds Elite Nexus for Windows, Linux and macOS and publishes them as a GitHub Release, with that
 # version's section of CHANGELOG.md as the release notes. See AGENTS.md › Releases.
 name: Release
 
@@ -63,8 +63,31 @@ jobs:
             out/*.tar.gz
             out/*.tar.gz.sha256
 
+  macos:
+    # Apple Silicon. The app is ad-hoc signed, not notarized: a downloaded copy has to be allowed once
+    # (System Settings › Privacy & Security › Open Anyway).
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build and pack
+        run: bash tools/macos/build-app.sh
+      - name: Package
+        run: |
+          # build-app.sh names the zip EliteNexus-v<version>-macos-<arch>.zip, as the tag names the release.
+          mkdir -p out
+          cp target/macos/EliteNexus-*-macos-*.zip out/
+          (cd out && for z in *.zip; do shasum -a 256 "$z" > "$z.sha256"; done)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            out/*.zip
+            out/*.zip.sha256
+
   publish:
-    needs: [windows, linux]
+    needs: [windows, linux, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

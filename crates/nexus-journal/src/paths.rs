@@ -1,6 +1,7 @@
 //! Locating the game's folders (journals, Options, Steam libraries) and enumerating journal files in order.
 //!
-//! On Linux the game runs in a Wine prefix (Steam's Proton, Lutris, Heroic). Its Windows user folder is
+//! On Linux the game runs in a Wine prefix (Steam's Proton, Lutris, Heroic), and on macOS in one too (NotProton's
+//! Steam Play, which keeps Proton's `compatdata` layout; CrossOver; Whisky). Its Windows user folder is
 //! `<prefix>/drive_c/users/<name>`, and the journals and Options sit inside it just as on Windows.
 
 use crate::time::Timestamp;
@@ -20,7 +21,10 @@ static JOURNAL_DIR_IN_USE: Mutex<Option<PathBuf>> = Mutex::new(None);
 /// `%USERPROFILE%\Saved Games\Frontier Developments\Elite Dangerous` (honouring folder redirection).
 ///
 /// On Linux, the same folder in the game's Wine prefix: Proton's in every Steam library (native, Flatpak and
-/// Snap Steam), Lutris's and Heroic's usual folders, `~/.wine`. With several, the one written to last.
+/// Snap Steam), Lutris's and Heroic's usual folders, `~/.wine`. On macOS: the prefix in every Steam library
+/// (NotProton), CrossOver's bottles, `~/.wine`, and only when none of those holds a journal folder, Whisky's
+/// bottles (they sit in Whisky's sandbox, and looking there makes macOS ask for access to another app's data).
+/// With several, the one written to last.
 pub fn default_journal_dir() -> Option<PathBuf> {
     #[cfg(windows)]
     {
@@ -32,8 +36,11 @@ pub fn default_journal_dir() -> Option<PathBuf> {
     }
     #[cfg(not(windows))]
     {
-        let found = wine_prefixes().iter().flat_map(|p| journal_dirs_in_prefix(p)).collect::<Vec<_>>();
-        found.into_iter().max_by_key(|d| std::fs::metadata(d).and_then(|m| m.modified()).ok())
+        let newest = |prefixes: Vec<PathBuf>| {
+            let found = prefixes.iter().flat_map(|p| journal_dirs_in_prefix(p)).collect::<Vec<_>>();
+            found.into_iter().max_by_key(|d| std::fs::metadata(d).and_then(|m| m.modified()).ok())
+        };
+        newest(wine_prefixes()).or_else(|| newest(sandboxed_wine_prefixes()))
     }
 }
 
@@ -61,8 +68,8 @@ pub fn options_dir() -> Option<PathBuf> {
     }
 }
 
-/// Linux: the `drive_c` folder of the game's Wine prefix (the one holding the journal folder in use, else the
-/// one found), where a Frontier or Epic launcher run under Wine installs the game. Windows: `None`.
+/// Linux and macOS: the `drive_c` folder of the game's Wine prefix (the one holding the journal folder in use, else
+/// the one found), where a Frontier or Epic launcher run under Wine installs the game. Windows: `None`.
 pub fn wine_drive_c() -> Option<PathBuf> {
     if cfg!(windows) {
         return None;
@@ -92,13 +99,15 @@ pub fn options_dir_beside(journal_dir: &Path) -> Option<PathBuf> {
     Some(OPTIONS_IN_LOCAL.iter().fold(profile.join("AppData").join("Local"), |p, c| p.join(c)))
 }
 
-/// `%LOCALAPPDATA%\Frontier Developments\Elite Dangerous\Options\Bindings` (on Linux, in the game's Wine prefix).
+/// `%LOCALAPPDATA%\Frontier Developments\Elite Dangerous\Options\Bindings` (on Linux and macOS, in the game's Wine
+/// prefix).
 pub fn default_bindings_dir() -> Option<PathBuf> {
     Some(options_dir()?.join("Bindings"))
 }
 
 /// Every Steam library folder on this PC (each holds `steamapps`), from Steam's `libraryfolders.vdf`.
-/// Windows: Steam in Program Files. Linux: native Steam, Flatpak Steam and Snap Steam.
+/// Windows: Steam in Program Files. Linux: native Steam, Flatpak Steam and Snap Steam. macOS: Steam in
+/// `~/Library/Application Support` (where NotProton keeps Windows games and their prefixes).
 pub fn steam_libraries() -> Vec<PathBuf> {
     let mut out: Vec<(PathBuf, PathBuf)> = Vec::new();
     for root in steam_roots() {
@@ -140,25 +149,58 @@ fn steam_roots() -> Vec<PathBuf> {
     for rel in [".local/share/Steam", ".steam/steam", ".steam/root", ".var/app/com.valvesoftware.Steam/.local/share/Steam", ".var/app/com.valvesoftware.Steam/data/Steam", "snap/steam/common/.local/share/Steam"] {
         roots.push(home.join(rel));
     }
+    if cfg!(target_os = "macos") {
+        roots.push(home.join(MACOS_STEAM));
+    }
     roots
 }
+
+/// The macOS Steam client's folder under `$HOME`, with its own `steamapps` (the default library).
+#[cfg(not(windows))]
+const MACOS_STEAM: &str = "Library/Application Support/Steam";
+/// CrossOver's bottles under `$HOME` (each bottle is a Wine prefix).
+#[cfg(not(windows))]
+const CROSSOVER_BOTTLES: &str = "Library/Application Support/CrossOver/Bottles";
+/// Whisky's bottles under `$HOME`, inside Whisky's sandbox container.
+#[cfg(not(windows))]
+const WHISKY_BOTTLES: &str = "Library/Containers/com.isaacmarovitz.Whisky/Bottles";
 
 fn same_path(a: &Path, b: &Path) -> bool {
     if cfg!(windows) { a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy()) } else { a == b }
 }
 
-/// Wine prefixes that may hold the game: Proton's in every Steam library, Lutris's (`~/Games/<game>`),
-/// Heroic's (`~/Games/Heroic/Prefixes/default/<game>`) and `~/.wine`.
+/// Wine prefixes that may hold the game: Proton's in every Steam library (NotProton's too, on macOS), Lutris's
+/// (`~/Games/<game>`), Heroic's (`~/Games/Heroic/Prefixes/default/<game>`), `~/.wine` and, on macOS, CrossOver's
+/// bottles.
 #[cfg(not(windows))]
 fn wine_prefixes() -> Vec<PathBuf> {
     let mut out: Vec<PathBuf> = steam_libraries().iter().map(|l| l.join("steamapps").join("compatdata").join(STEAM_APP_ID).join("pfx")).collect();
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
         out.push(home.join(".wine"));
-        for parent in [home.join("Games"), home.join("Games/Heroic/Prefixes/default"), home.join("Games/Heroic/Prefixes")] {
-            out.extend(std::fs::read_dir(parent).into_iter().flatten().flatten().map(|e| e.path()));
+        let mut parents = vec![home.join("Games"), home.join("Games/Heroic/Prefixes/default"), home.join("Games/Heroic/Prefixes")];
+        if cfg!(target_os = "macos") {
+            parents.push(home.join(CROSSOVER_BOTTLES));
+        }
+        for parent in parents {
+            out.extend(subfolders(&parent));
         }
     }
     out
+}
+
+/// macOS: Whisky's bottles, looked at only when no other prefix holds the journals. They sit in another app's
+/// sandbox container, and macOS asks the user before letting Elite Nexus look there. Elsewhere: none.
+#[cfg(not(windows))]
+fn sandboxed_wine_prefixes() -> Vec<PathBuf> {
+    match std::env::var_os("HOME").map(PathBuf::from) {
+        Some(home) if cfg!(target_os = "macos") => subfolders(&home.join(WHISKY_BOTTLES)),
+        _ => Vec::new(),
+    }
+}
+
+#[cfg(not(windows))]
+fn subfolders(dir: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).collect()
 }
 
 /// The journal folders in a Wine prefix: one per Windows user that has played (Proton's is `steamuser`).
@@ -255,5 +297,26 @@ mod tests {
         let options = pfx.join("AppData").join("Local").join("Frontier Developments").join("Elite Dangerous").join("Options");
         assert_eq!(options_dir_beside(&journals), Some(options));
         assert_eq!(options_dir_beside(&PathBuf::from("replays").join("Elite Dangerous")), None);
+    }
+
+    /// NotProton (Steam Play on macOS) keeps Proton's layout inside the macOS Steam library; CrossOver bottles and
+    /// prefixes made before NotProton's `steamuser` layout name the Windows user `crossover`.
+    #[cfg(not(windows))]
+    #[test]
+    fn finds_journals_in_a_notproton_prefix() {
+        let root = std::env::temp_dir().join(format!("nexus-journal-paths-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let pfx = root.join(MACOS_STEAM).join("steamapps").join("compatdata").join(STEAM_APP_ID).join("pfx");
+        let journals = |user: &str| JOURNAL_IN_PROFILE.iter().fold(pfx.join("drive_c").join("users").join(user), |p, c| p.join(c));
+        std::fs::create_dir_all(journals("steamuser")).unwrap();
+        std::fs::create_dir_all(pfx.join("drive_c").join("users").join("Public")).unwrap();
+        assert_eq!(journal_dirs_in_prefix(&pfx), vec![journals("steamuser")]);
+        let options = pfx.join("drive_c/users/steamuser/AppData/Local/Frontier Developments/Elite Dangerous/Options");
+        assert_eq!(options_dir_beside(&journals("steamuser")), Some(options));
+        std::fs::create_dir_all(journals("crossover")).unwrap();
+        let mut both = journal_dirs_in_prefix(&pfx);
+        both.sort();
+        assert_eq!(both, vec![journals("crossover"), journals("steamuser")]);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

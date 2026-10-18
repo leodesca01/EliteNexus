@@ -159,7 +159,7 @@ impl Settings {
         if let Ok(s) = serde_json::to_string_pretty(self) {
             let tmp = dir.join("settings.json.tmp");
             if std::fs::write(&tmp, s).is_ok() {
-                // Linux keeps API keys unencrypted (no DPAPI): only this user account may read them.
+                // Linux and macOS keep API keys unencrypted (no DPAPI): only this user account may read them.
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
@@ -176,13 +176,19 @@ impl Settings {
 /// Portable by default: a `nexus-data` folder next to the executable (keeps everything on the
 /// drive the app lives on). Falls back to `%LOCALAPPDATA%\EliteNexus` if that isn't writable (on Linux
 /// `$XDG_DATA_HOME/EliteNexus`, usually `~/.local/share/EliteNexus`). `ELITE_NEXUS_HOME` overrides both.
+///
+/// macOS: the app inside `Elite Nexus.app` keeps its data in `~/Library/Application Support/EliteNexus`, never in
+/// the bundle (a signed bundle must not change, and an update replaces it whole). A bare `EliteNexus` binary
+/// outside a bundle stays portable, as on Linux.
 pub fn data_dir() -> PathBuf {
     if let Some(p) = std::env::var_os("ELITE_NEXUS_HOME") {
         let p = PathBuf::from(p);
         let _ = std::fs::create_dir_all(&p);
         return p;
     }
-    if let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+    if let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf))
+        && !(cfg!(target_os = "macos") && in_app_bundle(&exe_dir))
+    {
         let p = exe_dir.join("nexus-data");
         if std::fs::create_dir_all(&p).is_ok() && is_writable(&p) {
             return p;
@@ -193,13 +199,32 @@ pub fn data_dir() -> PathBuf {
     p
 }
 
+/// macOS: this program is the one inside an app bundle (`Elite Nexus.app`), not a bare binary.
+pub fn runs_from_app_bundle() -> bool {
+    std::env::current_exe().ok().and_then(|e| e.parent().map(in_app_bundle)).unwrap_or(false)
+}
+
+/// True for the folder of an executable inside a macOS app bundle: `<Name>.app/Contents/MacOS`.
+fn in_app_bundle(exe_dir: &Path) -> bool {
+    let named = |p: Option<&Path>, name: &str| p.and_then(Path::file_name).is_some_and(|n| n == name);
+    let contents = exe_dir.parent();
+    let bundle = contents.and_then(Path::parent);
+    named(Some(exe_dir), "MacOS") && named(contents, "Contents") && bundle.and_then(Path::extension).is_some_and(|e| e.eq_ignore_ascii_case("app"))
+}
+
 #[cfg(windows)]
 pub(crate) fn user_data_base() -> Option<PathBuf> {
     std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
 }
 
+/// `~/Library/Application Support`.
+#[cfg(target_os = "macos")]
+pub(crate) fn user_data_base() -> Option<PathBuf> {
+    std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library").join("Application Support"))
+}
+
 /// `$XDG_DATA_HOME`, else `~/.local/share`.
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "macos")))]
 pub(crate) fn user_data_base() -> Option<PathBuf> {
     let xdg = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from).filter(|p| p.is_absolute());
     xdg.or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local").join("share")))
@@ -210,4 +235,19 @@ fn is_writable(dir: &Path) -> bool {
     let ok = std::fs::write(&probe, b"ok").is_ok();
     let _ = std::fs::remove_file(probe);
     ok
+}
+
+#[cfg(test)]
+mod tests {
+    use super::in_app_bundle;
+    use std::path::Path;
+
+    #[test]
+    fn knows_a_macos_app_bundle() {
+        assert!(in_app_bundle(Path::new("/Applications/Elite Nexus.app/Contents/MacOS")));
+        assert!(in_app_bundle(Path::new("/Users/cmdr/Applications/EliteNexus.APP/Contents/MacOS")));
+        assert!(!in_app_bundle(Path::new("/Users/cmdr/Desktop/EliteNexus-v0.5.0-macos-arm64")));
+        assert!(!in_app_bundle(Path::new("/Users/cmdr/MacOS")));
+        assert!(!in_app_bundle(Path::new("/Users/cmdr/Contents/MacOS")));
+    }
 }

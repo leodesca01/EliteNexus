@@ -27,6 +27,11 @@ mod untouched;
 mod widgets;
 
 fn app_icon() -> egui::IconData {
+    // macOS: an app bundle's own icon (Contents/Resources/EliteNexus.icns) is the one in the Dock. An empty icon
+    // keeps eframe from replacing it with this small square one at start.
+    if cfg!(target_os = "macos") && settings::runs_from_app_bundle() {
+        return egui::IconData::default();
+    }
     egui::IconData { rgba: icon::rgba(64), width: 64, height: 64 }
 }
 

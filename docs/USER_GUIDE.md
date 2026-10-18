@@ -54,7 +54,7 @@ choices or market filters, is one click away under **› Options**.
 ## Voice
 
 Alerts are spoken through Windows speech (on Linux through speech-dispatcher's `spd-say`, which most desktop
-distributions include; without it alerts are shown, not spoken). Choose the minimum priority in Settings:
+distributions include; without it alerts are shown, not spoken; on macOS through the system's `say`). Choose the minimum priority in Settings:
 * **Critical** — hull critical, ship destroyed.
 * **High** — Earth-like/water/ammonia/terraformable/high-value bodies, motherlodes, analysis complete, massacre
   mission done, fuel low with a non-scoopable star next, interdiction.
@@ -68,7 +68,8 @@ unless you enable it in Accounts & sync; when you do, only live game data is sen
 cargo), following each service's published rules.
 
 On Linux, when the folder next to the program can't be written to, data goes to `~/.local/share/EliteNexus` (or
-`$XDG_DATA_HOME/EliteNexus`).
+`$XDG_DATA_HOME/EliteNexus`). On macOS, `Elite Nexus.app` keeps its data in `~/Library/Application Support/EliteNexus`
+(never inside the app, so replacing the app keeps it).
 
 ## Linux
 
@@ -97,3 +98,31 @@ tested on Ubuntu, but hasn't yet been tried by us with the game running under Pr
 * The window draws with Vulkan or OpenGL, on X11 or Wayland. On Wayland the compact HUD can't keep itself above
   other windows (Wayland doesn't let apps do that): start Elite Nexus as `WAYLAND_DISPLAY= ./EliteNexus` to run it
   through XWayland, where it can.
+
+## macOS
+
+Elite Nexus runs natively on macOS (Apple Silicon and Intel) as `Elite Nexus.app`, next to Elite Dangerous running
+under NotProton (Steam Play for the macOS Steam client), CrossOver or Whisky. There is no download for it yet: build
+it on your Mac from the source with `tools/macos/build-app.sh --install` (it needs Xcode's Command Line Tools and
+Rust), which puts the app in Applications. The macOS build is new and hasn't been tried by us with every way of
+running the game.
+
+* **Journal folder**: found automatically in the game's prefix in every Steam library, which is where NotProton keeps
+  it, the same layout as Proton's: `~/Library/Application Support/Steam/steamapps/compatdata/359320/pfx/drive_c/users/steamuser/Saved Games/Frontier Developments/Elite Dangerous`.
+  Then in CrossOver's bottles (`~/Library/Application Support/CrossOver/Bottles/<bottle>`) and `~/.wine`, and only
+  when none of those has one, in Whisky's bottles (they sit in Whisky's own container, so macOS asks once whether
+  Elite Nexus may look there). For any other prefix (Sikarugir, a Wineskin wrapper), enter the folder under
+  **Settings › Journal › Custom journal folder**.
+* **Bindings, HUD colours, Glare and exposure** use the game's Options folder in the same prefix, as on Linux.
+* **The game folder** (built-in control presets, Cockpit lights) is found in your Steam libraries
+  (`~/Library/Application Support/Steam/steamapps/common/Elite Dangerous`) and in Program Files inside the prefix.
+* **Cockpit lights** and **Keep hostile red, friendly green and shield blue** use 3Dmigoto, which is untested on
+  macOS: CrossOver runs Direct3D 11 through D3DMetal or DXVK. If calibrating finds no shaders, add
+  `WINEDLLOVERRIDES="d3d11,d3dcompiler_47=n,b" %command%` to the game's launch options in Steam; if it still finds
+  none, the hook can't run there, and **Remove** takes it out again.
+* **Voice** uses the system's `say`, in the system voice chosen in System Settings › Accessibility › Spoken
+  Content. **API keys** aren't encrypted (there's no DPAPI); the settings file that holds them is readable only by
+  your user account.
+* The window draws with Metal. The compact HUD stays above other windows, but macOS gives a full-screen app a Space
+  of its own, where other apps' windows don't show: run the game in a window, or put the compact HUD on a second
+  display.

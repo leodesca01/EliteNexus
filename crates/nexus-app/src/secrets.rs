@@ -1,5 +1,5 @@
 //! API keys at rest: encrypted with Windows DPAPI (bound to this Windows user account), so a copied
-//! settings file is useless on another machine/account. Linux has no DPAPI: keys are stored base64 in a
+//! settings file is useless on another machine/account. Linux and macOS have no DPAPI: keys are stored base64 in a
 //! settings file only the user's account may read (see `Settings::save`), and the UI says so ([`KEPT`]).
 
 use base64::Engine;
@@ -7,7 +7,13 @@ use base64::Engine;
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
 /// How a saved key is kept, as the UI puts it ("Your key stays …").
-pub const KEPT: &str = if cfg!(windows) { "encrypted on this PC" } else { "on this PC, unencrypted but readable only by your user account" };
+pub const KEPT: &str = if cfg!(windows) {
+    "encrypted on this PC"
+} else if cfg!(target_os = "macos") {
+    "on this Mac, unencrypted but readable only by your user account"
+} else {
+    "on this PC, unencrypted but readable only by your user account"
+};
 
 /// Encrypts a secret for storage. Empty input stays empty.
 pub fn seal(plain: &str) -> String {

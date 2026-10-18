@@ -55,6 +55,16 @@ wsl -d EliteNexusLinux -u root -- bash tools/dev/linux.sh shot --page Settings -
 
 Builds go to `/root/target` inside the distro. CI runs the same clippy and tests on `ubuntu-latest`.
 
+## macOS
+
+The game runs under NotProton (Steam Play for the macOS Steam client, built on CrossOver), CrossOver or Whisky, so
+macOS shares the Linux code paths (`cfg(not(windows))`); the differences are behind `cfg!(target_os = "macos")`:
+the Steam folder and the bottles in `nexus_journal::paths`, the data folder (`settings::data_dir`: never inside an
+app bundle), voice through `/usr/bin/say` (`tts.rs`) and the bundle's own Dock icon (`main.rs`). Prefer `cfg!` over
+`#[cfg]` there, so the Linux build type-checks the macOS branches. `tools/macos/build-app.sh` builds, packs and
+ad-hoc signs `Elite Nexus.app` (`--install` copies it to Applications); its icon comes from
+`crates/nexus-app/examples/macos_iconset.rs`. CI runs clippy and tests on `macos-latest`.
+
 ## Hard rules
 
 * **Never upload history**, only live events. Test runs (`--journal-dir`, `--screenshot`) never upload at all.

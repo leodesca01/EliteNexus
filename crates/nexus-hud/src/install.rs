@@ -35,8 +35,9 @@ pub fn shader_mod(folder: &Path) -> Option<ShaderMod> {
     folder.join("d3dx.ini").is_file().then(|| ShaderMod { edhm: folder.join("EDHM-ini").is_dir(), enabled: folder.join("d3d11.dll").is_file() })
 }
 
-/// Every game client folder found in the usual Steam, Epic and Frontier locations. On Linux: every Steam
-/// library (Proton), and Program Files in the game's Wine prefix (a Frontier or Epic launcher under Wine).
+/// Every game client folder found in the usual Steam, Epic and Frontier locations. On Linux and macOS: every Steam
+/// library (Proton, NotProton), and Program Files in the game's Wine prefix (a Frontier or Epic launcher under
+/// Wine or CrossOver).
 pub fn find_installs() -> Vec<GameInstall> {
     let env = |k: &str| std::env::var_os(k).map(PathBuf::from);
     let mut roots: Vec<(PathBuf, &'static str)> = nexus_journal::steam_libraries().into_iter().map(|lib| (lib.join("steamapps").join("common").join("Elite Dangerous"), "Steam")).collect();

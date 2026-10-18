@@ -27,6 +27,6 @@ pub enum HudError {
     /// A single value such as `<GlareCompensation>` that is not a number.
     #[error("<{name}> should be a number, found {text:?}")]
     BadValue { name: &'static str, text: String },
-    #[error("The game's Options folder wasn't found (on Linux: set the journal folder in Settings to the one in the game's Wine prefix)")]
+    #[error("The game's Options folder wasn't found (on Linux or macOS: set the journal folder in Settings to the one in the game's Wine prefix)")]
     NoOptionsDir,
 }
